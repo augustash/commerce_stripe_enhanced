@@ -22,6 +22,13 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  * commerce_stripe_enhanced.settings:shipping_phone_field. Left empty, there is
  * nothing to write and this does nothing.
  *
+ * Where the number lives differs by wallet, and both shapes are real: Apple Pay
+ * returns it only in the payment method's billing details, Google Pay in both
+ * that and the shipping address. So both are read, shipping first. The format
+ * differs too - Apple Pay sends 6128030704 where Google Pay sends
+ * +1 650-555-5555 - so it is normalised, or the field holds whichever shape the
+ * customer's wallet happened to use.
+ *
  * @see \Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElement::updateShippingProfile()
  */
 class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
@@ -78,8 +85,40 @@ class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
       ?? NULL;
 
     if ($phone !== NULL && trim((string) $phone) !== '') {
-      $profile->set($field_name, trim((string) $phone));
+      $profile->set($field_name, $this->formatPhone((string) $phone));
     }
+  }
+
+  /**
+   * Normalises a wallet's phone number to +c ccc-ccc-cccc.
+   *
+   * Only where the digits are unambiguously a North American number - ten
+   * digits, or eleven beginning with the country code 1. Anything else is
+   * returned as the wallet sent it: a number we cannot parse with confidence is
+   * better stored unformatted than stamped with a country code it may not have,
+   * which would make it undialable rather than merely untidy.
+   *
+   * @param string $phone
+   *   The number as the wallet supplied it.
+   *
+   * @return string
+   *   The formatted number.
+   */
+  protected function formatPhone(string $phone): string {
+    $digits = preg_replace('/\D+/', '', $phone) ?? '';
+    if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+      $digits = substr($digits, 1);
+    }
+    elseif (strlen($digits) !== 10) {
+      return trim($phone);
+    }
+
+    return sprintf(
+      '+1 %s-%s-%s',
+      substr($digits, 0, 3),
+      substr($digits, 3, 3),
+      substr($digits, 6)
+    );
   }
 
 }
