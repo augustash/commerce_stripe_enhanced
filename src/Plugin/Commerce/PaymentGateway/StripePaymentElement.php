@@ -24,11 +24,23 @@ use Stripe\SetupIntent;
  * @see \Drupal\commerce_stripe_enhanced\EventSubscriber\StripePaymentIntentSubscriber
  *   which performs that move on the way out.
  *
+ * Declares every method type commerce_stripe ships, where the parent declares
+ * only stripe_card. A type absent from the annotation can never be enabled -
+ * PaymentGatewayBase::getPaymentMethodTypes() intersects the merchant's
+ * configuration with this list - so a short list here is a hard ceiling on
+ * what a site can offer, and silently: the checkbox simply is not on the
+ * gateway form. The intent narrowing reads whatever the merchant ticked, so
+ * nothing else needs to change when they tick something new.
+ *
  * @CommercePaymentGateway(
  *   id = "stripe_payment_element_enhanced",
  *   label = "Stripe Payment Element (enhanced)",
  *   display_label = "Stripe Payment Element (enhanced)",
- *   payment_method_types = {"stripe_card", "stripe_affirm"},
+ *   payment_method_types = {
+ *     "stripe_affirm", "stripe_alipay", "stripe_amazon_pay", "stripe_card",
+ *     "stripe_cashapp", "stripe_klarna", "stripe_link", "stripe_paypal",
+ *     "stripe_us_bank_account", "stripe_wechat_pay"
+ *   },
  *   forms = {
  *     "offsite-payment" = "Drupal\commerce_stripe\PluginForm\OffsiteRedirect\PaymentOffsiteForm",
  *   },
