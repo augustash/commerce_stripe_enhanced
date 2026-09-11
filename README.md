@@ -71,12 +71,22 @@ Then set the gateway's plugin to **Stripe Payment Element (enhanced)**
 (`stripe_payment_element_enhanced`) — it subclasses upstream's and adds no settings of its own,
 so an existing gateway keeps its configuration when repointed.
 
-It also declares every payment method type commerce_stripe ships, where upstream's declares
-only `stripe_card`. A type absent from a gateway plugin's annotation can never be enabled, and
-silently — the checkbox is simply not on the gateway form — so upstream's list is a ceiling on
-what a site can offer through it. Affirm, Klarna, Link, PayPal, Amazon Pay, Cash App, Alipay,
-WeChat Pay and US bank accounts are all tickable here, and the intent narrowing reads whatever
-was ticked, so nothing else needs changing when a site adds one.
+**Stripe stays the one place methods are switched on.** The gateway declares every payment
+method type commerce_stripe ships, where upstream's declares only `stripe_card` — a type absent
+from the annotation can never be enabled, and silently, since the checkbox is simply not on the
+form. But the form then narrows that list to what the Stripe account actually has enabled, read
+from its default payment method configuration, so the two can't disagree: a method that is off
+at Stripe is not offerable in Drupal, and one switched on at Stripe appears here without anyone
+remembering to mirror it.
+
+What's left to decide on the gateway form is only which of the *available* methods this gateway
+presents as a single checkout option — a different question, and the reason a site runs more
+than one instance (one for cards, one for Affirm, each its own radio with its own label).
+
+A method already saved but since turned off at Stripe stays on the form, labelled "not
+currently enabled at Stripe", rather than vanishing: it is still live on the gateway until
+someone unticks it, and hiding it would conceal that and make it unremovable. With no keys
+saved yet, or Stripe unreachable, the full list is shown with a note saying why.
 
 A site with no custom checkout flow is done: the module points commerce's stock
 `multistep_default` flow and `payment_information` pane at its own classes, leaving the ids,

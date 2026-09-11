@@ -191,7 +191,7 @@ class ExpressMethods {
     $standalone = [];
     foreach ($methods as $method) {
       if ($this->paymentMethodTypeManager->hasDefinition($this->pluginId($method))) {
-        $standalone[] = $this->stripeName($method);
+        $standalone[] = $this->stripeNameFromElementKey($method);
       }
     }
 
@@ -227,7 +227,7 @@ class ExpressMethods {
    * @return string
    *   The Stripe method name, snake_case.
    */
-  protected function stripeName(string $method): string {
+  public function stripeNameFromElementKey(string $method): string {
     return strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $method));
   }
 
@@ -244,7 +244,7 @@ class ExpressMethods {
    *   The payment method type plugin id.
    */
   protected function pluginId(string $method): string {
-    return 'stripe_' . $this->stripeName($method);
+    return 'stripe_' . $this->stripeNameFromElementKey($method);
   }
 
 }
