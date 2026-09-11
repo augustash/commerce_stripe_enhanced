@@ -1,0 +1,64 @@
+diff --git a/src/Controller/ExpressCheckoutController.php b/src/Controller/ExpressCheckoutController.php
+index 6dff4dc162..3e5971f002 100644
+--- a/src/Controller/ExpressCheckoutController.php
++++ b/src/Controller/ExpressCheckoutController.php
+@@ -211,8 +211,27 @@ public function onShippingRateChange(OrderInterface $commerce_order, Request $re
+       /** @var \Drupal\commerce_shipping\Entity\ShipmentInterface[] $shipments */
+       $shipments = $commerce_order->get('shipments')->referencedEntities();
+       $shipment = reset($shipments);
+-      // Apply the selected shipping rate to the order.
+-      $shipment->setShippingMethodId($shipping_rate['id']);
++      // Apply the selected rate through the shipment manager rather than
++      // writing the method id onto the shipment. setShippingMethodId() records
++      // the method and nothing else, so the service, its label and the rate's
++      // own amount are all left at whatever they were - which for a method
++      // offering more than one service means the customer's choice is lost.
++      $rates = $this->shipmentManager->calculateRates($shipment);
++      $rate = $rates[$shipping_rate['id']] ?? NULL;
++      if (!$rate) {
++        // A wallet echoing an id issued before this changed, which was the
++        // shipping method id: take that method's first rate.
++        foreach ($rates as $candidate) {
++          if ($candidate->getShippingMethodId() === $shipping_rate['id']) {
++            $rate = $candidate;
++            break;
++          }
++        }
++      }
++      if (!$rate) {
++        return new Response('Unknown shipping rate', 500);
++      }
++      $this->shipmentManager->applyRate($shipment, $rate);
+       $shipment->save();
+       $commerce_order->setData(ShippingOrderManagerInterface::FORCE_REFRESH, TRUE);
+       $commerce_order->save();
+@@ -401,11 +420,27 @@ protected function getFormattedShippingRates(ShipmentInterface $shipment): array
+ 
+     $formatted_shipping_rates = [];
+     foreach ($shipping_rates as $shipping_rate) {
+-      $formatted_shipping_rates[] = [
+-        'id' => $shipping_rate->getShippingMethodId(),
++      $formatted_shipping_rate = [
++        // The rate id, not the shipping method id. A method can offer several
++        // services - UPS Ground beside UPS Next Day, or one delivery service
++        // with and without a surcharge - and they share a method id, so keying
++        // on it gives the wallet several options it cannot tell apart and no
++        // way to say which one the customer chose.
++        'id' => $shipping_rate->getId(),
+         'displayName' => $shipping_rate->getService()->getLabel(),
+         'amount' => $this->minorUnitsConverter->toMinorUnits($shipping_rate->getAmount()),
+       ];
++      // The rate's description, in the element's only free-text slot. A
++      // shipping rate carries no field for one, and deliveryEstimate is
++      // documented as taking a string in place of the estimate object; both
++      // wallets render it as the detail line beneath the name, which is where
++      // a customer looks to find out what an option actually includes. Sites
++      // already write this text for their own checkout, and dropping it leaves
++      // the wallet showing a bare name and a price.
++      if ($description = $shipping_rate->getDescription()) {
++        $formatted_shipping_rate['deliveryEstimate'] = $description;
++      }
++      $formatted_shipping_rates[] = $formatted_shipping_rate;
+     }
+ 
+     return $formatted_shipping_rates;
