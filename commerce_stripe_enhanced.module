@@ -13,6 +13,39 @@ use Drupal\Core\Asset\AttachedAssetsInterface;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
+ * Implements hook_commerce_payment_gateway_info_alter().
+ *
+ * Lets the enhanced gateway offer every payment method type commerce_stripe
+ * ships, without naming them.
+ *
+ * A gateway definition's payment_method_types is a ceiling, not a default:
+ * PaymentGatewayBase::getPaymentMethodTypes() intersects it with the merchant's
+ * configuration, so a type missing from it can never be enabled - and silently,
+ * since its checkbox is then absent from the gateway form. Upstream's gateway
+ * names only stripe_card, which would hold a site to cards and Affirm.
+ *
+ * Read from the payment method type plugin manager rather than listed in the
+ * annotation, so commerce_stripe adding a method is picked up rather than
+ * needing a release here. Which of the available types a site may actually
+ * tick is narrowed further, to what the Stripe account has enabled.
+ *
+ * @see \Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement::buildConfigurationForm()
+ */
+function commerce_stripe_enhanced_commerce_payment_gateway_info_alter(array &$definitions) {
+  if (!isset($definitions['stripe_payment_element_enhanced'])) {
+    return;
+  }
+
+  $types = $definitions['stripe_payment_element_enhanced']['payment_method_types'];
+  foreach (array_keys(\Drupal::service('plugin.manager.commerce_payment_method_type')->getDefinitions()) as $plugin_id) {
+    if (str_starts_with($plugin_id, 'stripe_')) {
+      $types[] = $plugin_id;
+    }
+  }
+  $definitions['stripe_payment_element_enhanced']['payment_method_types'] = array_values(array_unique($types));
+}
+
+/**
  * Implements hook_commerce_checkout_pane_info_alter().
  *
  * Swaps classes rather than adding panes, which is what commerce's own
