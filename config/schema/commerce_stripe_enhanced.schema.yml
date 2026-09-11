@@ -1,0 +1,44 @@
+commerce_stripe_enhanced.settings:
+  type: config_object
+  label: "Commerce Stripe Enhanced settings"
+  mapping:
+    payment_pane_id:
+      type: string
+      label: "Payment information pane ID"
+    shipping_phone_field:
+      type: string
+      label: "Shipping profile phone field"
+    payment_method_images:
+      type: string
+      label: "Payment method image source"
+    express:
+      type: mapping
+      label: "Express checkout"
+      mapping:
+        enabled:
+          type: boolean
+          label: "Offer the express wallets in checkout"
+        step:
+          type: string
+          label: "Checkout step"
+        title:
+          type: label
+          label: "Section heading"
+        divider_label:
+          type: label
+          label: "Divider label"
+        button_height:
+          type: integer
+          label: "Button height"
+        wallets_always:
+          type: boolean
+          label: "Show Apple Pay and Google Pay on every browser"
+        overflow_never:
+          type: boolean
+          label: "Show every wallet rather than an overflow menu"
+
+# Subclasses commerce_stripe's Payment Element gateway without adding settings,
+# so it reuses the parent type wholesale.
+commerce_payment.commerce_payment_gateway.plugin.stripe_payment_element_enhanced:
+  type: commerce_payment.commerce_payment_gateway.plugin.stripe_payment_element
+  label: "Stripe Payment Element (enhanced) settings"

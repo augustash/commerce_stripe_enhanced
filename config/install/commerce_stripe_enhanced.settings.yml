@@ -1,0 +1,11 @@
+payment_pane_id: payment_information
+shipping_phone_field: ''
+payment_method_images: ''
+express:
+  enabled: true
+  step: ''
+  title: 'Express checkout'
+  divider_label: or
+  button_height: 54
+  wallets_always: true
+  overflow_never: true

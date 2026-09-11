@@ -1,0 +1,23 @@
+{
+    "name": "augustash/commerce_stripe_enhanced",
+    "description": "Closes the gaps between commerce_stripe and a real storefront: Affirm alongside saved cards, express wallets at the head of checkout, and a removable saved card.",
+    "type": "drupal-module",
+    "license": "proprietary",
+    "homepage": "https://github.com/augustash/commerce_stripe_enhanced",
+    "authors": [
+        {
+            "name": "Kazajhodo",
+            "homepage": "https://www.augustash.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/augustash/commerce_stripe_enhanced/issues",
+        "source": "https://github.com/augustash/commerce_stripe_enhanced"
+    },
+    "minimum-stability": "dev",
+    "require": {
+        "drupal/core": "^10 || ^11",
+        "drupal/commerce": "^2.36 || ^3",
+        "drupal/commerce_stripe": "^2.2"
+    }
+}

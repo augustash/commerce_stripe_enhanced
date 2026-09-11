@@ -1,0 +1,114 @@
+<?php
+
+namespace Drupal\commerce_stripe_enhanced\EventSubscriber;
+
+use Drupal\commerce_stripe\Event\PaymentIntentCreateEvent;
+use Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+
+/**
+ * Shapes the Stripe payment intent to the choice the customer actually made.
+ *
+ * Two jobs, both about what an intent is allowed to offer.
+ *
+ * Stripe excludes any method that cannot be saved for later — Affirm, Klarna,
+ * WeChat Pay — from an intent that asks for setup_future_usage across the whole
+ * intent. Asking for it on the card method alone leaves the rest untouched.
+ *
+ * And at checkout the intent is narrowed to card. Every radio on the payment
+ * step is a payment method with its own form, so an unfiltered intent turned
+ * the Credit Card option into a second menu offering Affirm and two wallets —
+ * a category pretending to be a choice, and Affirm twice over, since it is also
+ * its own radio.
+ *
+ * @see \Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement
+ *   which puts the value back where the parent gateway expects to read it.
+ */
+class StripePaymentIntentSubscriber implements EventSubscriberInterface {
+
+  /**
+   * {@inheritdoc}
+   *
+   * Spelled out rather than using StripeEvents::PAYMENT_INTENT_CREATE. This
+   * runs while the container compiles, and Drupal only registers a module's
+   * namespace once that module is enabled — so referencing the constant makes
+   * the container unbuildable on any environment where commerce_stripe is in
+   * the codebase but not yet installed. That is every deploy that lands this
+   * code ahead of its config import, and it deadlocks: nothing can boot, so
+   * nothing can run the import that would enable the module.
+   *
+   * Everything below this point is safe to reference normally — PHP resolves
+   * type hints and bodies on call, and the only caller is the event itself.
+   */
+  public static function getSubscribedEvents(): array {
+    return [
+      'commerce_stripe.payment_intent.create' => 'onIntentCreate',
+    ];
+  }
+
+  /**
+   * Narrows the intent to card and scopes setup_future_usage to it.
+   *
+   * @param \Drupal\commerce_stripe\Event\PaymentIntentCreateEvent $event
+   *   The intent create event.
+   */
+  public function onIntentCreate(PaymentIntentCreateEvent $event): void {
+    $order = $event->getOrder();
+    $gateway = $order->get('payment_gateway')->entity;
+    // Other gateways keep the stock behaviour.
+    if (!$gateway || !$gateway->getPlugin() instanceof StripePaymentElement) {
+      return;
+    }
+
+    $attributes = $event->getIntentAttributes();
+
+    // The express element builds its own intent through this same method, and
+    // its whole point is offering several wallets at once - Amazon Pay is a
+    // payment method type in its own right, so narrowing to card would empty
+    // the row. ExpressCheckoutController flags the order before it asks for an
+    // intent, which is what makes the two cases separable here.
+    if (!$order->getData('stripe_express_checkout', FALSE)) {
+      $attributes['payment_method_types'] = $this->intentMethodTypes($gateway->getPlugin());
+      // Stripe rejects an intent carrying both, and the parent sets this by
+      // default in createPaymentIntent().
+      unset($attributes['automatic_payment_methods']);
+    }
+
+    if (!empty($attributes['setup_future_usage'])) {
+      $attributes['payment_method_options']['card']['setup_future_usage'] = $attributes['setup_future_usage'];
+      unset($attributes['setup_future_usage']);
+    }
+
+    $event->setIntentAttributes($attributes);
+  }
+
+  /**
+   * Names the Stripe methods a gateway is configured to offer.
+   *
+   * Read off the gateway rather than mapped here, so a second instance is a
+   * config change: which methods an intent may offer is exactly what the
+   * gateway's payment_method_types already says. commerce_stripe names those
+   * plugins after the Stripe method with a `stripe_` prefix - stripe_affirm for
+   * affirm, stripe_us_bank_account for us_bank_account - so dropping the prefix
+   * is the whole translation, for all ten of them.
+   *
+   * @param \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\PaymentGatewayInterface $plugin
+   *   The gateway plugin.
+   *
+   * @return string[]
+   *   Stripe payment method type names.
+   */
+  protected function intentMethodTypes($plugin): array {
+    $types = [];
+    foreach (array_keys($plugin->getPaymentMethodTypes()) as $plugin_id) {
+      $types[] = str_starts_with($plugin_id, 'stripe_')
+        ? substr($plugin_id, strlen('stripe_'))
+        : $plugin_id;
+    }
+
+    // A gateway with nothing configured would otherwise send an empty list,
+    // which Stripe rejects outright.
+    return $types ?: ['card'];
+  }
+
+}

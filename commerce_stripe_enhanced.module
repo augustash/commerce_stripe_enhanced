@@ -1,0 +1,221 @@
+<?php
+
+/**
+ * @file
+ * Closes the gaps between commerce_stripe and a real storefront.
+ */
+
+use Drupal\commerce_checkout\Plugin\Commerce\CheckoutFlow\CheckoutFlowBase;
+use Drupal\commerce_payment\Entity\PaymentGateway;
+use Drupal\commerce_payment\Entity\PaymentMethodInterface;
+use Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElementInterface;
+use Drupal\Core\Asset\AttachedAssetsInterface;
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_commerce_checkout_pane_info_alter().
+ *
+ * Swaps classes rather than adding panes, which is what commerce's own
+ * payment_information docblock asks a subclass to do - the pane ids, the config
+ * that places them and any existing checkout flow all keep working untouched.
+ *
+ * A site that defined its own pane in payment_information's place names it in
+ * settings, and extends our class from it.
+ */
+function commerce_stripe_enhanced_commerce_checkout_pane_info_alter(array &$panes) {
+  if (isset($panes['stripe_review'])) {
+    $panes['stripe_review']['class'] = 'Drupal\commerce_stripe_enhanced\Plugin\Commerce\CheckoutPane\StripeReview';
+  }
+
+  $pane_id = \Drupal::config('commerce_stripe_enhanced.settings')->get('payment_pane_id') ?: 'payment_information';
+  // Only the stock pane. A site with its own has its own class, which extends
+  // ours - overwriting it here would throw that site's code away.
+  if ($pane_id === 'payment_information' && isset($panes[$pane_id])) {
+    $panes[$pane_id]['class'] = 'Drupal\commerce_stripe_enhanced\Plugin\Commerce\CheckoutPane\PaymentInformation';
+  }
+}
+
+/**
+ * Implements hook_commerce_checkout_flow_info_alter().
+ *
+ * Only the stock flow, and only while it still carries commerce's own class. A
+ * site with a flow of its own uses StripePaymentElementFlowTrait instead, and a
+ * site that already swapped this class has made a choice we do not overrule.
+ */
+function commerce_stripe_enhanced_commerce_checkout_flow_info_alter(array &$definitions) {
+  $stock = 'Drupal\commerce_checkout\Plugin\Commerce\CheckoutFlow\MultistepDefault';
+  if (($definitions['multistep_default']['class'] ?? NULL) === $stock) {
+    $definitions['multistep_default']['class'] = 'Drupal\commerce_stripe_enhanced\Plugin\Commerce\CheckoutFlow\MultistepDefault';
+  }
+}
+
+/**
+ * Implements hook_library_info_alter().
+ *
+ * Replaces commerce_stripe's Payment Element behavior wholesale. Upstream binds
+ * a submit listener per mount, which leaks one listener per AJAX refresh of the
+ * payment pane; ours binds once and reads the live mount at submit time.
+ *
+ * @see js/stripe-payment-element.js
+ */
+function commerce_stripe_enhanced_library_info_alter(array &$libraries, $extension) {
+  if ($extension === 'commerce_stripe' && isset($libraries['payment_element'])) {
+    $path = \Drupal::service('extension.list.module')->getPath('commerce_stripe_enhanced');
+    $libraries['payment_element']['js'] = [
+      '/' . $path . '/js/stripe-payment-element.js' => [
+        'attributes' => ['defer' => TRUE],
+      ],
+    ];
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function commerce_stripe_enhanced_form_commerce_checkout_flow_alter(array &$form, FormStateInterface $form_state) {
+  $form_object = $form_state->getFormObject();
+  if (!$form_object instanceof CheckoutFlowBase) {
+    return;
+  }
+
+  // The express wallets, at the head of the first step a customer sees.
+  \Drupal::service('commerce_stripe_enhanced.express_checkout')
+    ->attach($form, $form_object, $form['#step_id'] ?? NULL);
+
+  $pane_id = \Drupal::config('commerce_stripe_enhanced.settings')->get('payment_pane_id') ?: 'payment_information';
+  // commerce_stripe keys its own payment-option treatment on the stock pane id,
+  // so a site that renamed the pane loses the custom label and the card icons
+  // with no error anywhere. Same work, against the id this site uses.
+  if ($pane_id === 'payment_information') {
+    return;
+  }
+  if (!isset($form[$pane_id]['payment_method'], $form[$pane_id]['#payment_options'])) {
+    return;
+  }
+  /** @var \Drupal\commerce_payment\PaymentOption $payment_option */
+  foreach ($form[$pane_id]['#payment_options'] as $key => $payment_option) {
+    // Stored methods keep their own label; only the "new payment" option for
+    // the gateway itself gets the Stripe treatment.
+    if ($payment_option->getPaymentMethodId()) {
+      continue;
+    }
+    $payment_gateway = PaymentGateway::load($payment_option->getPaymentGatewayId());
+    $plugin = $payment_gateway?->getPlugin();
+    if (!$plugin instanceof StripePaymentElementInterface) {
+      continue;
+    }
+    // Empty unless a custom label is configured on the gateway, in which case
+    // there is nothing to render and the stock label stands.
+    $display_label = $plugin->getCheckoutDisplayLabel();
+    if (!empty($display_label)) {
+      $form['#attached']['library'][] = 'commerce_stripe/credit_card_icons';
+      $form[$pane_id]['payment_method']['#options'][$key] = $display_label;
+    }
+  }
+}
+
+/**
+ * Implements hook_js_settings_alter().
+ *
+ * Upstream exposes button theme and type for the Express Checkout element but
+ * not its layout, so these go through the seam its README names. The values
+ * land on elements.create('expressCheckout', ...).
+ */
+function commerce_stripe_enhanced_js_settings_alter(array &$settings, AttachedAssetsInterface $assets) {
+  if (empty($settings['commerceStripeExpressCheckoutElement'])) {
+    return;
+  }
+  // Keyed by element id - a cart page listing several carts carries one element
+  // per cart - so every one of them gets the same options.
+  foreach ($settings['commerceStripeExpressCheckoutElement'] as &$element_settings) {
+    if (isset($element_settings['expressCheckoutOptions'])) {
+      commerce_stripe_enhanced_set_express_options($element_settings['expressCheckoutOptions']);
+    }
+  }
+  unset($element_settings);
+}
+
+/**
+ * Applies the configured Express Checkout element options to one element.
+ *
+ * @param array $options
+ *   The expressCheckoutOptions passed to elements.create('expressCheckout').
+ */
+function commerce_stripe_enhanced_set_express_options(array &$options) {
+  $config = \Drupal::config('commerce_stripe_enhanced.settings')->get('express');
+
+  // Stripe's default collapses the extra wallets behind an overflow menu, which
+  // starts closed - a wallet nobody can see is a wallet nobody picks. Leave
+  // maxRows unset: Stripe rejects overflow 'never' alongside it.
+  if (!empty($config['overflow_never'])) {
+    $options['layout']['overflow'] = 'never';
+  }
+
+  // Both wallets default to 'auto', which Stripe only honours on the browser
+  // that owns them - Apple Pay on Safari, Google Pay on Chrome - so on any
+  // other one they simply never appear, which reads as the wallet being
+  // unavailable rather than unsupported. 'always' is the documented way to show
+  // them everywhere; the cost is that a customer not signed in to that wallet
+  // gets a sign-in flow rather than a one-tap payment.
+  if (!empty($config['wallets_always'])) {
+    foreach (['applePay', 'googlePay'] as $wallet) {
+      if (isset($options['paymentMethods'][$wallet])) {
+        $options['paymentMethods'][$wallet] = 'always';
+      }
+    }
+  }
+
+  // The most compact branding each wallet permits. 'plain' drops the "Buy with"
+  // lead-in, leaving just the wallet's own mark - Apple and Google both allow
+  // it and it is the narrowest sanctioned form. Their guidelines require the
+  // official button art, so this is as small as the branding legitimately goes;
+  // Stripe exposes no type or theme for Amazon Pay at all.
+  $options['buttonType']['googlePay'] = 'plain';
+
+  // Stripe accepts 40-55. Sized to whatever button the wallets sit beside, so
+  // the row reads as an alternative to it rather than a lesser control below.
+  if (!empty($config['button_height'])) {
+    $options['buttonHeight'] = (int) $config['button_height'];
+  }
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_predelete() for commerce_payment_method.
+ *
+ * Releases a card from any order still being built before it goes.
+ *
+ * A customer can remove a card from the payment step of the very checkout that
+ * has it selected. Left alone, the order would hold a reference to an entity
+ * that no longer exists, alongside a Stripe intent minted against the card that
+ * has just been detached at Stripe - so the next step would confirm a payment
+ * for a card nobody can pay with. Placed orders keep their reference: it is the
+ * record of how they were paid.
+ */
+function commerce_stripe_enhanced_commerce_payment_method_predelete(PaymentMethodInterface $payment_method) {
+  $order_storage = \Drupal::entityTypeManager()->getStorage('commerce_order');
+  $order_ids = $order_storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('state', 'draft')
+    ->condition('payment_method', $payment_method->id())
+    ->execute();
+
+  /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+  foreach ($order_storage->loadMultiple($order_ids) as $order) {
+    // Clearing the method is what has commerce_stripe cancel the intent minted
+    // for this card and take it off the order, and it ignores an order with no
+    // gateway - so this save happens while the gateway is still in place.
+    $order->set('payment_method', NULL);
+    $order->save();
+
+    // The gateway was recorded for this card, so it goes with it. Left behind,
+    // the payment step reads it as a choice already made and renders that
+    // gateway's card fields under a list where nothing is selected.
+    //
+    // Nothing takes their place. Choosing the next card for them is a decision
+    // they did not make, and it would mint an intent for a step they may not
+    // even be on - the same reason the step preselects nothing.
+    $order->set('payment_gateway', NULL);
+    $order->unsetData('stripe_intent');
+    $order->save();
+  }
+}

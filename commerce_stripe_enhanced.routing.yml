@@ -1,0 +1,7 @@
+commerce_stripe_enhanced.settings:
+  path: '/admin/commerce/config/stripe-enhanced'
+  defaults:
+    _form: '\Drupal\commerce_stripe_enhanced\Form\SettingsForm'
+    _title: 'Stripe Enhanced'
+  requirements:
+    _permission: 'administer commerce_payment_gateway'

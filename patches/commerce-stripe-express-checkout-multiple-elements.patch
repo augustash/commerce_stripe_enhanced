@@ -1,0 +1,82 @@
+diff --git a/js/commerce_stripe.express_checkout_element.js b/js/commerce_stripe.express_checkout_element.js
+index f929a0e78d..2ddbd1a53e 100644
+--- a/js/commerce_stripe.express_checkout_element.js
++++ b/js/commerce_stripe.express_checkout_element.js
+@@ -8,7 +8,7 @@
+   /**
+    * The Stripe Express Checkout Element Instances.
+    *
+-   * Only one instance is supported.
++   * Keyed by the element each instance is mounted on.
+    *
+    * @type {Map}
+    */
+@@ -293,26 +293,32 @@
+         return;
+       }
+ 
+-      const settings = drupalSettings.commerceStripeExpressCheckoutElement;
+-      if (!settings?.publishableKey || !settings?.elementId) {
+-        console.error('Required settings are missing');
+-        return;
+-      }
++      // A page can carry more than one Express Checkout element — a cart page
++      // listing several carts gives each its own. The settings are keyed by
++      // element id, so mount every one of them.
++      const allSettings =
++        drupalSettings.commerceStripeExpressCheckoutElement ?? {};
++      Object.values(allSettings).forEach((settings) => {
++        if (!settings?.publishableKey || !settings?.elementId) {
++          console.error('Required settings are missing');
++          return;
++        }
+ 
+-      const [element] = once(
+-        'stripe-processed',
+-        `#${settings.elementId}`,
+-        context,
+-      );
+-      if (element) {
+-        const checkoutElement = new CommerceStripeExpressCheckoutElement(
+-          settings,
+-        );
+-        Drupal.CommerceStripeExpressCheckoutInstances.set(
+-          element,
+-          checkoutElement,
++        const [element] = once(
++          'stripe-processed',
++          `#${settings.elementId}`,
++          context,
+         );
+-      }
++        if (element) {
++          const checkoutElement = new CommerceStripeExpressCheckoutElement(
++            settings,
++          );
++          Drupal.CommerceStripeExpressCheckoutInstances.set(
++            element,
++            checkoutElement,
++          );
++        }
++      });
+     },
+     detach: (context, settings, trigger) => {
+       if (context !== document || trigger !== 'unload') {
+diff --git a/src/ExpressCheckoutButtonsBuilder.php b/src/ExpressCheckoutButtonsBuilder.php
+index 9c1f1c1fb1..8eaaad0f04 100644
+--- a/src/ExpressCheckoutButtonsBuilder.php
++++ b/src/ExpressCheckoutButtonsBuilder.php
+@@ -74,8 +74,11 @@ public function build(OrderInterface $order, PaymentGatewayInterface $payment_ga
+     $element['#attributes']['class'][] = 'stripe-express-checkout-element-form';
+     $element_id = Html::getUniqueId('stripe-express-checkout-element');
+     $element['#attached']['library'][] = 'commerce_stripe/express_checkout_element';
+-    $element['#attached']['drupalSettings']['commerceStripeExpressCheckoutElement'] = [];
+-    $js_settings = &$element['#attached']['drupalSettings']['commerceStripeExpressCheckoutElement'];
++    // Keyed by element id so that a page carrying more than one Express
++    // Checkout element (a cart page listing several carts, for instance) keeps
++    // the settings of every one of them.
++    $element['#attached']['drupalSettings']['commerceStripeExpressCheckoutElement'][$element_id] = [];
++    $js_settings = &$element['#attached']['drupalSettings']['commerceStripeExpressCheckoutElement'][$element_id];
+     $js_settings = [
+       'publishableKey' => $payment_gateway_plugin->getPublishableKey(),
+       'elementId' => $element_id,

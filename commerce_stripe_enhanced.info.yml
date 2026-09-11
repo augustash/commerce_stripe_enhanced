@@ -1,0 +1,10 @@
+name: "Commerce Stripe Enhanced"
+type: module
+description: "Closes the gaps between commerce_stripe and a real storefront: Affirm alongside saved cards, express wallets at the head of checkout, the Payment Element sitting with the radio that asks for it, and a saved card the customer can remove."
+package: Commerce
+core_version_requirement: ^10 || ^11
+configure: commerce_stripe_enhanced.settings
+dependencies:
+  - commerce:commerce_payment
+  - commerce:commerce_checkout
+  - commerce_stripe:commerce_stripe
