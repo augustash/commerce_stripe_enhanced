@@ -11,9 +11,21 @@ services:
       - '@config.factory'
       - '@commerce_stripe.express_checkout_buttons_builder'
       - '@commerce_stripe_enhanced.express_methods'
+  commerce_stripe_enhanced.payment_method_limits:
+    class: Drupal\commerce_stripe_enhanced\PaymentMethodLimits
+  commerce_stripe_enhanced.payment_options_subscriber:
+    class: Drupal\commerce_stripe_enhanced\EventSubscriber\PaymentOptionsSubscriber
+    arguments:
+      - '@entity_type.manager'
+      - '@commerce_stripe_enhanced.express_methods'
+      - '@commerce_stripe_enhanced.payment_method_limits'
+    tags:
+      - { name: event_subscriber }
   commerce_stripe_enhanced.payment_intent_subscriber:
     class: Drupal\commerce_stripe_enhanced\EventSubscriber\StripePaymentIntentSubscriber
-    arguments: ['@commerce_stripe_enhanced.express_methods']
+    arguments:
+      - '@commerce_stripe_enhanced.express_methods'
+      - '@commerce_stripe_enhanced.payment_method_limits'
     tags:
       - { name: event_subscriber }
   commerce_stripe_enhanced.express_checkout_subscriber:

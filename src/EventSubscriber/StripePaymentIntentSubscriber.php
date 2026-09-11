@@ -5,6 +5,7 @@ namespace Drupal\commerce_stripe_enhanced\EventSubscriber;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_stripe\Event\PaymentIntentCreateEvent;
 use Drupal\commerce_stripe_enhanced\ExpressMethods;
+use Drupal\commerce_stripe_enhanced\PaymentMethodLimits;
 use Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
@@ -33,8 +34,13 @@ class StripePaymentIntentSubscriber implements EventSubscriberInterface {
    *
    * @param \Drupal\commerce_stripe_enhanced\ExpressMethods $expressMethods
    *   The express methods helper.
+   * @param \Drupal\commerce_stripe_enhanced\PaymentMethodLimits $limits
+   *   The payment method limits.
    */
-  public function __construct(protected ExpressMethods $expressMethods) {}
+  public function __construct(
+    protected ExpressMethods $expressMethods,
+    protected PaymentMethodLimits $limits,
+  ) {}
 
   /**
    * {@inheritdoc}
@@ -139,6 +145,14 @@ class StripePaymentIntentSubscriber implements EventSubscriberInterface {
       ]);
     }
     $types = array_values(array_diff($types, $express)) ?: $types;
+
+    // And minus anything Stripe will not take this order's amount for. Naming
+    // it would have Stripe refuse the intent outright, which breaks the step
+    // rather than just hiding a method - PaymentOptionsSubscriber has already
+    // withheld any option that had nothing else to offer, so what is dropped
+    // here is a method sitting alongside one that works.
+    $accepted = $this->limits->accepted($types, $order->getTotalPrice());
+    $types = $accepted ?: $types;
 
     // A gateway with nothing configured would otherwise send an empty list,
     // which Stripe rejects outright.

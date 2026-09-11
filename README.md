@@ -40,6 +40,21 @@ lands it beside the list rather than under the option that asked for it — and 
 payment radios refresh over AJAX and that pane does not, a stale element was left on the page
 after switching methods. Nesting it puts contrib's own refresh in charge of both.
 
+**A method Stripe won't take the amount for isn't offered.** Stripe enforces a minimum and
+maximum per method and refuses to create the intent outside them — and that refusal lands as the
+payment step builds, so the customer who picked the option gets a broken step, not a message.
+Affirm is $35–$30,000 USD. Upstream never hits this because `automatic_payment_methods` resolves
+per order and simply omits the method; naming the types explicitly, which is what makes one
+payment radio mean one method, is what loses that. So the option is withheld instead, and the
+intent drops the method where the option had something else to offer.
+
+Those bounds live in code (`PaymentMethodLimits`), not configuration: they are Stripe's rules
+rather than a site's decision, they are exposed by no API — a payment method configuration
+carries only `available` and a display preference, so the numbers exist only in the rejection
+message — and as config they would be hand-maintained, and drift, per site. A site's *own* rule
+is a different thing and belongs in configuration, as an order-total condition on the gateway:
+"we don't offer financing under $50" is a business call sitting above whatever Stripe allows.
+
 **Nothing is preselected.** Upstream picks a method for the customer, which reads as a decision
 they did not make and spends a Stripe intent on every arrival at the step — wrong the moment
 they pick anything else, abandoned if they never pick at all. A card already on file is the
