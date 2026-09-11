@@ -3,11 +3,8 @@
 namespace Drupal\commerce_stripe_enhanced;
 
 use Drupal\commerce_checkout\Plugin\Commerce\CheckoutFlow\CheckoutFlowInterface;
-use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_stripe\ExpressCheckoutButtonsBuilderInterface;
-use Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElementInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
@@ -34,17 +31,17 @@ class ExpressCheckout {
   /**
    * Constructs the express checkout helper.
    *
-   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
-   *   The entity type manager.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
    *   The config factory.
    * @param \Drupal\commerce_stripe\ExpressCheckoutButtonsBuilderInterface $buttonsBuilder
    *   The Express Checkout buttons builder.
+   * @param \Drupal\commerce_stripe_enhanced\ExpressMethods $expressMethods
+   *   The express methods helper.
    */
   public function __construct(
-    protected EntityTypeManagerInterface $entityTypeManager,
     protected ConfigFactoryInterface $configFactory,
     protected ExpressCheckoutButtonsBuilderInterface $buttonsBuilder,
+    protected ExpressMethods $expressMethods,
   ) {}
 
   /**
@@ -71,7 +68,7 @@ class ExpressCheckout {
     if (!$order || $order->getTotalPrice() === NULL || !$order->getTotalPrice()->isPositive()) {
       return;
     }
-    $payment_gateway = $this->expressGateway($order);
+    $payment_gateway = $this->expressMethods->expressGateway($order);
     if (!$payment_gateway) {
       return;
     }
@@ -137,32 +134,6 @@ class ExpressCheckout {
         continue;
       }
       return $step_id;
-    }
-
-    return NULL;
-  }
-
-  /**
-   * Finds the gateway whose express element should be offered.
-   *
-   * The first Stripe Payment Element gateway available to this order. More than
-   * one can be enabled - a second instance offering a different Stripe method
-   * is how this module expects Affirm to be configured - but they share one
-   * Stripe account, so the wallets any of them can raise are the same wallets.
-   * Offering a second row of them would ask the same question twice.
-   *
-   * @param \Drupal\commerce_order\Entity\OrderInterface $order
-   *   The order.
-   *
-   * @return \Drupal\commerce_payment\Entity\PaymentGatewayInterface|null
-   *   The gateway, or NULL if none of the order's gateways is a Stripe one.
-   */
-  protected function expressGateway(OrderInterface $order) {
-    $storage = $this->entityTypeManager->getStorage('commerce_payment_gateway');
-    foreach ($storage->loadMultipleForOrder($order) as $payment_gateway) {
-      if ($payment_gateway->getPlugin() instanceof StripePaymentElementInterface) {
-        return $payment_gateway;
-      }
     }
 
     return NULL;

@@ -2,7 +2,9 @@
 
 namespace Drupal\commerce_stripe_enhanced\EventSubscriber;
 
+use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_stripe\Event\PaymentIntentCreateEvent;
+use Drupal\commerce_stripe_enhanced\ExpressMethods;
 use Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
@@ -25,6 +27,14 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  *   which puts the value back where the parent gateway expects to read it.
  */
 class StripePaymentIntentSubscriber implements EventSubscriberInterface {
+
+  /**
+   * Constructs the subscriber.
+   *
+   * @param \Drupal\commerce_stripe_enhanced\ExpressMethods $expressMethods
+   *   The express methods helper.
+   */
+  public function __construct(protected ExpressMethods $expressMethods) {}
 
   /**
    * {@inheritdoc}
@@ -68,7 +78,7 @@ class StripePaymentIntentSubscriber implements EventSubscriberInterface {
     // the row. ExpressCheckoutController flags the order before it asks for an
     // intent, which is what makes the two cases separable here.
     if (!$order->getData('stripe_express_checkout', FALSE)) {
-      $attributes['payment_method_types'] = $this->intentMethodTypes($gateway->getPlugin());
+      $attributes['payment_method_types'] = $this->intentMethodTypes($gateway->getPlugin(), $order);
       // Stripe rejects an intent carrying both, and the parent sets this by
       // default in createPaymentIntent().
       unset($attributes['automatic_payment_methods']);
@@ -83,7 +93,7 @@ class StripePaymentIntentSubscriber implements EventSubscriberInterface {
   }
 
   /**
-   * Names the Stripe methods a gateway is configured to offer.
+   * Names the Stripe methods this intent should offer in the pane.
    *
    * Read off the gateway rather than mapped here, so a second instance is a
    * config change: which methods an intent may offer is exactly what the
@@ -92,19 +102,43 @@ class StripePaymentIntentSubscriber implements EventSubscriberInterface {
    * affirm, stripe_us_bank_account for us_bank_account - so dropping the prefix
    * is the whole translation, for all ten of them.
    *
+   * Minus whatever the express element is already offering. The two lists are
+   * configured independently and nothing upstream ties them, so a method
+   * turned on in both is presented twice - and the second time is not a second
+   * radio: a Stripe Payment Element gateway renders one radio per instance
+   * however many method types it carries, and the extra methods surface as
+   * tabs inside the element. So the intent is the only lever, and a wallet
+   * ticked for express arrives here as a tab under "Credit Card", asking for
+   * something the customer already walked past above the form.
+   *
    * @param \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\PaymentGatewayInterface $plugin
    *   The gateway plugin.
+   * @param \Drupal\commerce_order\Entity\OrderInterface $order
+   *   The order the intent is for.
    *
    * @return string[]
    *   Stripe payment method type names.
    */
-  protected function intentMethodTypes($plugin): array {
+  protected function intentMethodTypes($plugin, OrderInterface $order): array {
     $types = [];
     foreach (array_keys($plugin->getPaymentMethodTypes()) as $plugin_id) {
-      $types[] = str_starts_with($plugin_id, 'stripe_')
-        ? substr($plugin_id, strlen('stripe_'))
-        : $plugin_id;
+      $types[] = $this->expressMethods->stripeNameFromPluginId($plugin_id);
     }
+
+    $express = $this->expressMethods->standalone(
+      $this->expressMethods->enabledMethods($order)
+    );
+    // Except whatever the customer has actually selected. The radio offering a
+    // method for the first time is gone, but a method already on file keeps
+    // its own - so an intent that dropped its type would render a selected
+    // option that cannot be confirmed, which is worse than offering it twice.
+    $selected = $order->get('payment_method')->entity;
+    if ($selected) {
+      $express = array_diff($express, [
+        $this->expressMethods->stripeNameFromPluginId($selected->bundle()),
+      ]);
+    }
+    $types = array_values(array_diff($types, $express)) ?: $types;
 
     // A gateway with nothing configured would otherwise send an empty list,
     // which Stripe rejects outright.

@@ -18,6 +18,23 @@ wallets — a category pretending to be a choice. The intent is narrowed to the 
 gateway actually offers, read off its own `payment_method_types`, so a second gateway instance
 is a config change rather than a code one.
 
+**One offer per wallet, worked out rather than configured.** The express element and the
+payment pane are configured on separate screens and nothing upstream ties them: the element
+shows whatever is ticked in the gateway's `express_checkout.allowed_payment_method_types`, the
+pane offers whatever that gateway names in `payment_method_types`. Turn Amazon Pay, PayPal,
+Klarna or Link on in both and the customer meets it as a one-tap button above the form and
+again inside the form, having already walked past it. The button is the better offer, so it
+keeps the method.
+
+Nothing about this is a setting, because nothing about it needs to be asked. Which methods the
+express element offers is already the gateway's own configuration; which of those have a
+duplicate to remove is derived — Apple Pay and Google Pay have no payment method type plugin,
+because they are a card presented by a wallet rather than methods of their own, so narrowing an
+intent to `card` cannot remove them and they are turned off through the Payment Element's
+`wallets` option instead. Every other express-capable method does have a plugin, and the
+intent's `payment_method_types` governs it. A hand-kept list of "these are the wallets" would
+be a third copy of a fact the code can already read, and the first one to go stale.
+
 **The Payment Element sits with its radio.** Upstream renders it from a separate pane, which
 lands it beside the list rather than under the option that asked for it — and because the
 payment radios refresh over AJAX and that pane does not, a stale element was left on the page
@@ -53,6 +70,13 @@ drush en commerce_stripe_enhanced
 Then set the gateway's plugin to **Stripe Payment Element (enhanced)**
 (`stripe_payment_element_enhanced`) — it subclasses upstream's and adds no settings of its own,
 so an existing gateway keeps its configuration when repointed.
+
+It also declares every payment method type commerce_stripe ships, where upstream's declares
+only `stripe_card`. A type absent from a gateway plugin's annotation can never be enabled, and
+silently — the checkbox is simply not on the gateway form — so upstream's list is a ceiling on
+what a site can offer through it. Affirm, Klarna, Link, PayPal, Amazon Pay, Cash App, Alipay,
+WeChat Pay and US bank accounts are all tickable here, and the intent narrowing reads whatever
+was ticked, so nothing else needs changing when a site adds one.
 
 A site with no custom checkout flow is done: the module points commerce's stock
 `multistep_default` flow and `payment_information` pane at its own classes, leaving the ids,

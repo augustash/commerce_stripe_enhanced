@@ -29,15 +29,23 @@ class StripeReview extends StripeReviewBase {
 
     $settings = &$pane_form['#attached']['drupalSettings'];
 
-    // Apple Pay and Google Pay are not payment method types - they ride on
-    // card, so narrowing the intent to card leaves them showing as tabs. They
-    // are offered once, on their own terms, by the express element at the head
-    // of checkout; re-offering them here asks a question already answered.
-    if (isset($settings['commerceStripePaymentElement']['paymentElementOptions'])) {
-      $settings['commerceStripePaymentElement']['paymentElementOptions']['wallets'] = [
-        'applePay' => 'never',
-        'googlePay' => 'never',
-      ];
+    // A card-riding wallet - Apple Pay, Google Pay - is not a payment method
+    // type, so narrowing the intent to card does not remove it and it shows
+    // here as a tab regardless. The express element offers it once, on its own
+    // terms; re-offering it here asks a question already answered.
+    //
+    // Which wallets those are is derived, not listed, and only the ones this
+    // order's express element actually offers are turned off: a site running no
+    // express element keeps them here, where they are then the only way a
+    // customer reaches a wallet at all.
+    //
+    // \Drupal:: rather than injection on purpose. Overriding the constructor
+    // would pin this class to upstream's argument list, which has changed
+    // before and takes the whole checkout down with it when it does.
+    $express_methods = \Drupal::service('commerce_stripe_enhanced.express_methods');
+    $wallets = $express_methods->cardRiding($express_methods->enabledMethods($this->order));
+    if ($wallets && isset($settings['commerceStripePaymentElement']['paymentElementOptions'])) {
+      $settings['commerceStripePaymentElement']['paymentElementOptions']['wallets'] = array_fill_keys($wallets, 'never');
     }
 
     // The Payment Element and the older Card Element each carry their own copy.

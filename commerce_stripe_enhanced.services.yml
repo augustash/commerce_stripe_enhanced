@@ -1,12 +1,19 @@
 services:
-  commerce_stripe_enhanced.express_checkout:
-    class: Drupal\commerce_stripe_enhanced\ExpressCheckout
+  commerce_stripe_enhanced.express_methods:
+    class: Drupal\commerce_stripe_enhanced\ExpressMethods
     arguments:
       - '@entity_type.manager'
       - '@config.factory'
+      - '@plugin.manager.commerce_payment_method_type'
+  commerce_stripe_enhanced.express_checkout:
+    class: Drupal\commerce_stripe_enhanced\ExpressCheckout
+    arguments:
+      - '@config.factory'
       - '@commerce_stripe.express_checkout_buttons_builder'
+      - '@commerce_stripe_enhanced.express_methods'
   commerce_stripe_enhanced.payment_intent_subscriber:
     class: Drupal\commerce_stripe_enhanced\EventSubscriber\StripePaymentIntentSubscriber
+    arguments: ['@commerce_stripe_enhanced.express_methods']
     tags:
       - { name: event_subscriber }
   commerce_stripe_enhanced.express_checkout_subscriber:
