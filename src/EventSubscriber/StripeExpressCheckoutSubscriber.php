@@ -77,12 +77,24 @@ class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
     }
 
     $attributes = $event->getChargeAttributes();
-    // Stripe returns it against the shipping address the wallet supplied. The
-    // payment method's billing details carry it too, for a wallet that
-    // collected a billing phone but no shipping one.
+    // The shipping phone first: this lands on the shipping profile, so the
+    // number wanted is the one for the delivery, and a wallet that supplies one
+    // is naming it. Google Pay does. Apple Pay returns no shipping phone at
+    // all, so for it the billing details are the only source - which is why the
+    // fallback is not optional.
+    //
+    // billing_details on the charge, not under payment_method - a charge's
+    // payment_method is an id string unless it was expanded, and indexing a
+    // string by name finds nothing. That was the bug: every Apple Pay order
+    // lost its phone number, silently, and Google Pay hid it for three orders
+    // by satisfying the first lookup.
     $phone = $attributes['shipping']['phone']
-      ?? $attributes['payment_method']['billing_details']['phone']
+      ?? $attributes['billing_details']['phone']
       ?? NULL;
+    // And under an expanded payment method, for a caller that passes one.
+    if ($phone === NULL && is_array($attributes['payment_method'] ?? NULL)) {
+      $phone = $attributes['payment_method']['billing_details']['phone'] ?? NULL;
+    }
 
     if ($phone !== NULL && trim((string) $phone) !== '') {
       $profile->set($field_name, $this->formatPhone((string) $phone));
