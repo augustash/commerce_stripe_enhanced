@@ -105,14 +105,24 @@ trait StripePaymentElementFlowTrait {
     // leaves an abandoned intent behind whenever they never do. A stored method
     // is the exception: that is a choice already made.
     if (!$option) {
+      // Drop a gateway recorded on an earlier visit before asking which option
+      // is the default, not after. Commerce reads that gateway when it picks
+      // one - and tests the gateway *config entity* against
+      // SupportsStoredPaymentMethodsInterface, which no config entity
+      // implements, so a gateway with no payment method beside it always
+      // resolves to that gateway's own "pay with a new method" option. Left in
+      // place it therefore answers a question the customer has not been asked,
+      // and answers it differently from the pane: the pane builds after this
+      // runs, by which point the gateway is gone, so it falls through to the
+      // customer's default card and ticks it. One page, two answers - a saved
+      // card selected above a step with no Payment Element on it.
+      $order->set('payment_gateway', NULL);
       $default = $options_builder->selectDefaultOption($order, $options);
       if (!$default->getPaymentMethodId()) {
-        // A gateway recorded on an earlier visit is dropped for this build.
-        // stripe_review keys its visibility on the order's gateway, so left in
-        // place it renders that gateway's card fields under a list where
-        // nothing is ticked. Only in memory: nothing saves it back, and the
-        // next choice records its own.
-        $order->set('payment_gateway', NULL);
+        // Nothing to record, and the gateway is already gone for this build.
+        // stripe_review keys its visibility on it, so the step renders with no
+        // card fields under a list where nothing is ticked. Only in memory:
+        // nothing saves it back, and the next choice records its own.
         return;
       }
       $option = $default;
