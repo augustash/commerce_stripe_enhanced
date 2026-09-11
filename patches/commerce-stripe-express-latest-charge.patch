@@ -1,0 +1,33 @@
+diff --git a/src/Plugin/Commerce/PaymentGateway/StripePaymentElement.php b/src/Plugin/Commerce/PaymentGateway/StripePaymentElement.php
+index a91a735689..54696a51c6 100644
+--- a/src/Plugin/Commerce/PaymentGateway/StripePaymentElement.php
++++ b/src/Plugin/Commerce/PaymentGateway/StripePaymentElement.php
+@@ -814,11 +814,25 @@ protected function processExpressCheckoutOrder(OrderInterface $order): void {
+     $intent_id = $order->getData('stripe_intent');
+     $intent = $this->getStripePaymentIntent($intent_id);
+ 
+-    if (!isset($intent->charges)) {
++    // The charge list was removed from the PaymentIntent object in Stripe API
++    // version 2022-11-15, which replaced it with a single latest_charge. Read
++    // whichever the configured version provides: without this, every express
++    // order returns here and nothing the wallet collected is recorded - no
++    // email, no billing profile, and a shipping address left with whatever
++    // partial values the shippingaddresschange event supplied, so the order
++    // arrives with no street to deliver to.
++    $charge_attributes = NULL;
++    if (isset($intent->charges->data[0])) {
++      $charge_attributes = $intent->charges->data[0];
++    }
++    elseif (!empty($intent->latest_charge)) {
++      $charge_attributes = is_string($intent->latest_charge)
++        ? Charge::retrieve($intent->latest_charge)
++        : $intent->latest_charge;
++    }
++    if (!$charge_attributes) {
+       return;
+     }
+-
+-    $charge_attributes = $intent->charges->data[0];
+     if (isset($charge_attributes['billing_details'])) {
+       $billing_details = $charge_attributes['billing_details'];
+       // Assign the order to the email taken from the billing details
