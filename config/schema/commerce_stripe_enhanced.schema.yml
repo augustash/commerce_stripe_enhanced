@@ -11,6 +11,9 @@ commerce_stripe_enhanced.settings:
     payment_method_images:
       type: string
       label: "Payment method image source"
+    hide_card_terms:
+      type: boolean
+      label: "Hide the card consent notice"
     express:
       type: mapping
       label: "Express checkout"

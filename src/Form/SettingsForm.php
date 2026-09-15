@@ -49,6 +49,13 @@ class SettingsForm extends ConfigFormBase {
       '#description' => $this->t('The field on the customer profile that receives the phone number a wallet collected. Commerce ships no such field, so leave this empty unless the site added one (for example <code>field_phone</code>). Empty means the number is discarded, which is how commerce_stripe behaves on its own.'),
     ];
 
+    $form['hide_card_terms'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Hide the card consent notice'),
+      '#default_value' => $config->get('hide_card_terms'),
+      '#description' => $this->t('Stripe prints a notice under the card fields when the card is saved for later, telling the customer they allow future charges. Saving a card for future use needs that consent, so hide it only where the site states equivalent terms itself.'),
+    ];
+
     $form['payment_method_images'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Payment method image source'),
@@ -127,6 +134,7 @@ class SettingsForm extends ConfigFormBase {
       ->set('payment_pane_id', trim($form_state->getValue('payment_pane_id')))
       ->set('shipping_phone_field', trim($form_state->getValue('shipping_phone_field')))
       ->set('payment_method_images', trim($form_state->getValue('payment_method_images')))
+      ->set('hide_card_terms', (bool) $form_state->getValue('hide_card_terms'))
       ->set('express.enabled', (bool) $express['enabled'])
       ->set('express.step', trim($express['step']))
       ->set('express.title', $express['title'])

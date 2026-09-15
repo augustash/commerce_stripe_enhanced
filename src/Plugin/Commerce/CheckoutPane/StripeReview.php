@@ -48,6 +48,13 @@ class StripeReview extends StripeReviewBase {
       $settings['commerceStripePaymentElement']['paymentElementOptions']['wallets'] = array_fill_keys($wallets, 'never');
     }
 
+    // Stripe's consent notice for a card saved for later. A site may state its
+    // own terms instead; consent is still needed, so this only hides Stripe's.
+    if (\Drupal::config('commerce_stripe_enhanced.settings')->get('hide_card_terms')
+      && isset($settings['commerceStripePaymentElement']['paymentElementOptions'])) {
+      $settings['commerceStripePaymentElement']['paymentElementOptions']['terms']['card'] = 'never';
+    }
+
     // The Payment Element and the older Card Element each carry their own copy.
     foreach (['commerceStripePaymentElement', 'commerceStripe'] as $key) {
       if (!isset($settings[$key]['returnUrl'])) {

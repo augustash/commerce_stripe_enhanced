@@ -125,6 +125,7 @@ sensible way to want them off.
 |---|---|---|
 | Payment information pane ID | `payment_information` | The site defined its own pane in commerce's place. That pane's class must extend this module's `PaymentInformation`. |
 | Shipping profile phone field | *(empty)* | The site added a phone field to the customer profile and wants the number a wallet collected. Commerce ships no such field; empty discards it, as upstream does. |
+| Hide the card consent notice | off | The site states its own terms for charging a saved card. Stripe's notice under the card fields is that consent; hiding it without saying the same elsewhere leaves future charges on a saved card without it. |
 | Payment method image source | *(empty)* | A `module:directory` pair holding one PNG per gateway ID, shown beside that gateway's radio. Gateway IDs are the site's own, so point this at a module whose images are named for them. |
 | Express: checkout step | *(empty — derived)* | **Read this before setting it.** Empty means the first step a customer lands on. |
 

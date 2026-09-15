@@ -1,6 +1,7 @@
 payment_pane_id: payment_information
 shipping_phone_field: ''
 payment_method_images: ''
+hide_card_terms: false
 express:
   enabled: true
   step: ''
