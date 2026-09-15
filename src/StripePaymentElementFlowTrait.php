@@ -2,7 +2,10 @@
 
 namespace Drupal\commerce_stripe_enhanced;
 
+use Drupal\commerce_stripe_enhanced\Ajax\StepSavedCommand;
 use Drupal\Component\Utility\NestedArray;
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
@@ -208,6 +211,10 @@ trait StripePaymentElementFlowTrait {
 
     $element = $form['stripe_review'];
     unset($form['stripe_review']);
+    // Inside the pane, which a change of payment method refreshes over AJAX,
+    // rather than the actions, which it does not: on a first visit nothing is
+    // chosen yet, so the button has to arrive with the card fields.
+    $this->addStepSave($element);
 
     // Sit directly under the radios, above the billing-address checkbox.
     $element['#weight'] = -5;
@@ -242,6 +249,106 @@ trait StripePaymentElementFlowTrait {
     // The pane was built before this child existed, so let it sort again.
     unset($form[$pane_id]['#sorted']);
     $this->markPaymentMethodChildren($form);
+  }
+
+  /**
+   * Lets the Payment Element save its step before it confirms.
+   *
+   * commerce_stripe expects the card on a step of its own, after the payment
+   * step has submitted. Collected on the payment step instead, the card's
+   * confirm sends the customer straight to Stripe from a form Drupal never
+   * receives - so every other input on the step was lost on a card order: the
+   * billing address, "same as shipping", order notes, any opt-in. The element
+   * now submits the step here first, over AJAX so the card it holds survives,
+   * and confirms only once that has saved.
+   *
+   * @param array $element
+   *   The stripe_review pane, before it is nested.
+   */
+  protected function addStepSave(array &$element) {
+    $element['stripe_save_step'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Save payment details'),
+      '#name' => 'stripe_save_step',
+      '#submit' => ['::submitStepWithoutAdvancing'],
+      '#ajax' => [
+        'callback' => '::ajaxStepSaved',
+        'event' => 'commerce-stripe-enhanced-save-step',
+        'progress' => ['type' => 'none'],
+      ],
+      // Commerce runs inline forms' submit handlers - the billing profile's,
+      // and with it "same as shipping" - only for a primary or secondary
+      // button. Secondary is its type for one that saves without the styling.
+      '#button_type' => 'secondary',
+      // Never shown: Place Order triggers it. Hidden around the whole element
+      // rather than on the button, which a theme can restyle past [hidden],
+      // and inside whatever wrapper and spacing a form theme puts around it.
+      '#prefix' => '<div hidden style="display: none">',
+      '#suffix' => '</div>',
+      '#attributes' => [
+        'tabindex' => '-1',
+      ],
+      '#attached' => [
+        'drupalSettings' => [
+          'commerceStripeEnhanced' => ['saveStepButton' => 'stripe_save_step'],
+        ],
+      ],
+    ];
+  }
+
+  /**
+   * Submits the step's panes and saves the order, without leaving the step.
+   *
+   * What the flow's own submit does, less moving to the next step: that
+   * happens when Stripe returns.
+   *
+   * @param array $form
+   *   The checkout form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The form state.
+   */
+  public function submitStepWithoutAdvancing(array &$form, FormStateInterface $form_state) {
+    foreach ($this->getVisiblePanes($form['#step_id']) as $pane_id => $pane) {
+      if (isset($form[$pane_id])) {
+        $pane->submitPaneForm($form[$pane_id], $form_state, $form);
+      }
+    }
+    if ($this->hasSidebar($form['#step_id'])) {
+      foreach ($this->getVisiblePanes('_sidebar') as $pane_id => $pane) {
+        if (isset($form['sidebar'][$pane_id])) {
+          $pane->submitPaneForm($form['sidebar'][$pane_id], $form_state, $form);
+        }
+      }
+    }
+    $this->getOrder()->save();
+  }
+
+  /**
+   * Reports the save to the Payment Element.
+   *
+   * Errors go back as messages rather than a re-rendered pane: re-rendering
+   * would destroy the mounted element and the card typed into it.
+   *
+   * @param array $form
+   *   The checkout form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The form state.
+   *
+   * @return \Drupal\Core\Ajax\AjaxResponse
+   *   The response.
+   */
+  public function ajaxStepSaved(array &$form, FormStateInterface $form_state) {
+    $response = new AjaxResponse();
+    $errors = $form_state->getErrors();
+    foreach ($errors as $error) {
+      $response->addCommand(new MessageCommand($error, NULL, ['type' => 'error'], FALSE));
+    }
+    // Shown already; left in the messenger they would repeat on the next page.
+    if ($errors) {
+      \Drupal::messenger()->deleteByType('error');
+    }
+    $response->addCommand(new StepSavedCommand(!$errors));
+    return $response;
   }
 
   /**

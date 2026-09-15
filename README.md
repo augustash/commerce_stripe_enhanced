@@ -70,6 +70,14 @@ still holding it, along with the intent minted against it.
 alone, gated on `enable_on_cart`. A customer can reach checkout without ever seeing a cart, and
 for them the wallets do not exist. See the warning under Configuration before moving them.
 
+**The rest of the payment step saves before the card is confirmed.** Upstream collects the card
+on a step of its own, after the payment step has submitted. Collected on the payment step
+instead, confirming sends the customer to Stripe from a form Drupal never receives, so on a
+card order everything else on that step was lost: the billing address and "same as shipping",
+order notes, any opt-in. Place Order now submits the step's panes over AJAX first — the card
+typed into the element survives, and a validation error comes back as a message — and confirms
+only once that has saved.
+
 **A Payment Element that survives an AJAX refresh.** Upstream binds a submit listener per
 mount, so each refresh of the payment pane leaves another listener holding a destroyed
 Elements instance — and on submit the stale one throws "We could not retrieve data from the

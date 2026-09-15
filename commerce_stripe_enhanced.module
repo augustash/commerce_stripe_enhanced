@@ -99,6 +99,9 @@ function commerce_stripe_enhanced_library_info_alter(array &$libraries, $extensi
         'attributes' => ['defer' => TRUE],
       ],
     ];
+    // The step is saved over Drupal's AJAX before the card is confirmed.
+    $libraries['payment_element']['dependencies'][] = 'core/jquery';
+    $libraries['payment_element']['dependencies'][] = 'core/drupal.ajax';
   }
 }
 

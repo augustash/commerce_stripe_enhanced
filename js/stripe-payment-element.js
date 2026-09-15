@@ -13,11 +13,57 @@
  * So bind to the form once and read the live mount at submit time instead.
  */
 
-((Drupal, drupalSettings, once, Stripe) => {
+((Drupal, drupalSettings, once, Stripe, $) => {
   /**
    * The current mount, replaced whenever the pane re-renders.
    */
   let active = null;
+
+  /**
+   * Resolves the save in flight when the server reports on it.
+   */
+  let settleSave = null;
+
+  /**
+   * Receives the server's report on a step save.
+   */
+  Drupal.AjaxCommands.prototype.commerceStripeEnhancedStepSaved = (
+    ajax,
+    response,
+  ) => {
+    if (settleSave) {
+      settleSave(response.saved);
+      settleSave = null;
+    }
+  };
+
+  /**
+   * Submits the rest of the step to Drupal before the card leaves for Stripe.
+   *
+   * Confirming sends the customer to Stripe from a form Drupal never receives,
+   * so without this every other input on the step - the billing address,
+   * "same as shipping", order notes - was dropped on a card order.
+   *
+   * @param {HTMLFormElement} form
+   *   The checkout form.
+   *
+   * @return {Promise<boolean>}
+   *   Whether the step saved.
+   */
+  function saveStep(form) {
+    // Found by name: nested inside the pane, its data-drupal-selector carries
+    // the pane's parents and so varies by site.
+    const name = drupalSettings.commerceStripeEnhanced?.saveStepButton;
+    const trigger = name && form.querySelector(`[name="${name}"]`);
+    // A flow without the save button behaves as upstream did.
+    if (!trigger) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      settleSave = resolve;
+      $(trigger).trigger('commerce-stripe-enhanced-save-step');
+    });
+  }
 
   /**
    * Confirms the payment for whichever mount is live when the form submits.
@@ -31,8 +77,28 @@
 
     event.preventDefault();
     const { stripe, elements, settings, button } = active;
+    const release = () => {
+      if (button) {
+        button.disabled = false;
+      }
+    };
     if (button) {
       button.disabled = true;
+    }
+
+    // Surface a card the customer has not finished before anything is saved,
+    // rather than saving the step and then refusing the payment.
+    if (settings.showPaymentForm) {
+      const { error } = await elements.submit();
+      if (error) {
+        release();
+        return;
+      }
+    }
+
+    if (!(await saveStep(event.target))) {
+      release();
+      return;
     }
 
     const confirm =
@@ -126,4 +192,4 @@
       );
     },
   };
-})(Drupal, drupalSettings, once, window.Stripe);
+})(Drupal, drupalSettings, once, window.Stripe, jQuery);
