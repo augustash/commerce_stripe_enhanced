@@ -8,7 +8,6 @@ use Drupal\commerce_price\MinorUnitsConverterInterface;
 use Drupal\commerce_stripe\ErrorHelper;
 use Drupal\commerce_stripe\EventSubscriber\OrderPaymentIntentSubscriber as OrderPaymentIntentSubscriberBase;
 use Drupal\commerce_stripe_enhanced\PaymentBreakdown;
-use Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Password\PasswordGeneratorInterface;
 use Psr\Log\LoggerInterface;
@@ -96,9 +95,10 @@ class OrderPaymentIntentSubscriber extends OrderPaymentIntentSubscriberBase {
           'amount' => $balance['amount'],
           'currency' => $balance['currency'],
         ];
+        // Whatever gateway the order is on now: an intent minted with a
+        // breakdown refuses any amount that does not restate it.
         $order = $this->orders[$intent_id] ?? NULL;
-        $gateway = $order?->get('payment_gateway')->entity;
-        if ($gateway && $gateway->getPlugin() instanceof StripePaymentElement && $order->getBalance()) {
+        if ($order && $order->getBalance()) {
           // The amount and its breakdown are read off the same order at the
           // same moment. The balance was recorded at whichever save changed
           // it, and a later save in the request can change the order again.
