@@ -70,13 +70,24 @@ still holding it, along with the intent minted against it.
 alone, gated on `enable_on_cart`. A customer can reach checkout without ever seeing a cart, and
 for them the wallets do not exist. See the warning under Configuration before moving them.
 
-**The rest of the payment step saves before the card is confirmed.** Upstream collects the card
-on a step of its own, after the payment step has submitted. Collected on the payment step
-instead, confirming sends the customer to Stripe from a form Drupal never receives, so on a
-card order everything else on that step was lost: the billing address and "same as shipping",
-order notes, any opt-in. Place Order now submits the step's panes over AJAX first — the card
-typed into the element survives, and a validation error comes back as a message — and confirms
-only once that has saved.
+**A hook for saving the rest of the payment step before the card is confirmed.** Upstream
+collects the card on a step of its own, after the payment step has submitted. Collected on the
+payment step instead, confirming sends the customer to Stripe from a form Drupal never
+receives, so anything else on that step — the billing address and "same as shipping", order
+notes, any opt-in — is lost unless something saves it first. How a site saves its step is the
+site's business, so Place Order validates the card and then dispatches
+`commerce-payment:handoff` on the checkout form, waiting on whatever listeners hand back:
+
+```js
+form.addEventListener('commerce-payment:handoff', (event) => {
+  // Resolve true when the step has saved; false stops the confirm.
+  event.detail.waitUntil(saveMyStep(form));
+});
+```
+
+`event.detail.gateway` is `stripe`. With no listener the card confirms at once, as upstream.
+The event name carries no provider on purpose: a site's other off-page methods can dispatch the
+same event, and one listener covers them all.
 
 **A Payment Element that survives an AJAX refresh.** Upstream binds a submit listener per
 mount, so each refresh of the payment pane leaves another listener holding a destroyed
