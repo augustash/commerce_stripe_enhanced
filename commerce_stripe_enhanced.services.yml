@@ -36,6 +36,16 @@ services:
       - '@commerce_stripe_enhanced.payment_method_limits'
     tags:
       - { name: event_subscriber }
+  commerce_stripe_enhanced.payment_breakdown:
+    class: Drupal\commerce_stripe_enhanced\PaymentBreakdown
+    arguments:
+      - '@commerce_price.minor_units_converter'
+      - '@commerce_price.currency_formatter'
+  commerce_stripe_enhanced.payment_breakdown_subscriber:
+    class: Drupal\commerce_stripe_enhanced\EventSubscriber\PaymentBreakdownSubscriber
+    arguments: ['@commerce_stripe_enhanced.payment_breakdown']
+    tags:
+      - { name: event_subscriber }
   commerce_stripe_enhanced.express_checkout_subscriber:
     class: Drupal\commerce_stripe_enhanced\EventSubscriber\StripeExpressCheckoutSubscriber
     arguments: ['@config.factory']

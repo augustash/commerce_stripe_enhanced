@@ -89,6 +89,27 @@ form.addEventListener('commerce-payment:handoff', (event) => {
 The event name carries no provider on purpose: a site's other off-page methods can dispatch the
 same event, and one listener covers them all.
 
+**A payment Stripe can read against the order.** Upstream sends Stripe an amount and nothing
+about what it is made of, so a refund taken in the dashboard means opening the order to find
+out which part of the total was shipping. The breakdown now goes two places, because Stripe
+uses them for different things:
+
+- **Metadata** — `subtotal`, then one entry per adjustment type (`shipping`, `tax`,
+  `promotion`, `fee`…), then `shipping_method`. The dashboard shows it beside the payment.
+  Written when the payment is recorded, once the order can no longer change.
+- **`amount_details`** — line items, shipping, tax and discount, where Stripe asks for them and
+  passes them to card networks, Klarna and PayPal. The dashboard shows none of it.
+
+The intent also gets `Order <id>` as its description, the order id as `order_reference`, and the
+shipping method as `shipping.carrier`. It is the id rather than the order number because Commerce
+numbers an order only when it is placed, after the intent and the payment both exist.
+
+Once an intent carries `amount_details`, Stripe refuses any change to its amount that does not
+restate them — and upstream's `commerce_stripe.order_events_subscriber` changes the amount alone
+whenever the balance moves. That service is replaced with a subclass sending both. A balance the
+breakdown cannot add up to (a partial payment, a fractional quantity) sends none, and clears any
+already there: a payment without a breakdown still goes through, a refused intent does not.
+
 **A Payment Element that survives an AJAX refresh.** Upstream binds a submit listener per
 mount, so each refresh of the payment pane leaves another listener holding a destroyed
 Elements instance — and on submit the stale one throws "We could not retrieve data from the
