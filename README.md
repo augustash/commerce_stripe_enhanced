@@ -60,6 +60,13 @@ they did not make and spends a Stripe intent on every arrival at the step — wr
 they pick anything else, abandoned if they never pick at all. A card already on file is the
 exception: that choice was made.
 
+**An intent the order lets go of is cancelled.** Upstream cancels a stored intent only when the
+payment method changes on a Stripe gateway, and stops looking once the order has moved to
+another gateway — so a customer whose saved card minted an intent, and who then paid with
+PayPal or Affirm, left that intent "Incomplete" at Stripe for good. Now any intent the order
+stops referencing is cancelled, unless it has already succeeded, is processing, or awaits
+capture.
+
 **A saved card the customer can remove.** A card that is wrong or dead announces itself at the
 moment it is being chosen, and sending someone to their account page to deal with it loses the
 checkout. The link goes to commerce's own delete form, which owns the confirmation, the access

@@ -65,6 +65,36 @@ class OrderPaymentIntentSubscriber extends OrderPaymentIntentSubscriberBase {
 
   /**
    * {@inheritdoc}
+   *
+   * Also cancels an intent the order stops referencing, however it came to.
+   * Upstream cancels only when the payment method changes on a Stripe gateway,
+   * and returns before looking once the order has moved to another gateway -
+   * so choosing PayPal or Affirm after the card's intent was minted left that
+   * intent open at Stripe for good. The status check upstream applies here
+   * too, so a payment that has gone through is never cancelled.
+   */
+  public function onOrderPreSave(OrderEvent $event): void {
+    parent::onOrderPreSave($event);
+
+    $order = $event->getOrder();
+    $original = $order->original ?? NULL;
+    $dropped = $original?->getData('stripe_intent');
+    if (!$dropped || $dropped === $order->getData('stripe_intent') || isset($this->cancelList[$dropped])) {
+      return;
+    }
+    $intent = $this->getIntent($dropped);
+    if ($intent instanceof PaymentIntent && !in_array($intent->status, [
+      PaymentIntent::STATUS_SUCCEEDED,
+      PaymentIntent::STATUS_PROCESSING,
+      PaymentIntent::STATUS_REQUIRES_CAPTURE,
+      PaymentIntent::STATUS_CANCELED,
+    ], TRUE)) {
+      $this->cancelList[$dropped] = $dropped;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function onOrderUpdate(OrderEvent $event): void {
     parent::onOrderUpdate($event);
@@ -83,6 +113,10 @@ class OrderPaymentIntentSubscriber extends OrderPaymentIntentSubscriberBase {
    */
   public function destruct(): void {
     foreach ($this->updateList as $intent_id => $balance) {
+      // Being cancelled below; nothing to bring up to date.
+      if (isset($this->cancelList[$intent_id])) {
+        continue;
+      }
       try {
         $intent = $this->getIntent($intent_id);
         if (!($intent instanceof PaymentIntent) || !in_array($intent->status, [
