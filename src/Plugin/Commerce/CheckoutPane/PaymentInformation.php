@@ -94,6 +94,25 @@ class PaymentInformation extends PaymentInformationBase {
   }
 
   /**
+   * {@inheritdoc}
+   *
+   * The parent clears stale input for add_payment_method only. A gateway that
+   * stores no payment method - Affirm, PayPal - carries its billing form at
+   * pane level instead, so that input survived the switch and the rebuilt form
+   * read it as submitted: "same as shipping" arrived with no value and came up
+   * unticked, where a new billing profile should default to copying shipping.
+   */
+  public static function clearValues(array $element, FormStateInterface $form_state) {
+    $element = parent::clearValues($element, $form_state);
+    $triggering_element = $form_state->getTriggeringElement();
+    if ($triggering_element && end($triggering_element['#parents']) === 'payment_method') {
+      $user_input = &$form_state->getUserInput();
+      NestedArray::unsetValue($user_input, array_merge($element['#parents'], ['billing_information']));
+    }
+    return $element;
+  }
+
+  /**
    * Puts each gateway's mark beside its radio.
    *
    * Sourced from a "module:directory" pair in
