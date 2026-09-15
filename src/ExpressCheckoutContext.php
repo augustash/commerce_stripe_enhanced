@@ -2,6 +2,7 @@
 
 namespace Drupal\commerce_stripe_enhanced;
 
+use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
@@ -50,6 +51,24 @@ class ExpressCheckoutContext {
     $route_name = $this->routeMatch->getRouteName();
 
     return $route_name !== NULL && str_starts_with($route_name, self::ROUTE_PREFIX);
+  }
+
+  /**
+   * The gateway a wallet is paying through, on the confirm that names it.
+   *
+   * commerce_stripe's express confirm creates the intent before it records
+   * the gateway on the order, so anything reading the order's gateway while
+   * the intent is built finds none. The route has it.
+   *
+   * @return \Drupal\commerce_payment\Entity\PaymentGatewayInterface|null
+   *   The gateway, or NULL outside an express request that carries one.
+   */
+  public function gateway(): ?PaymentGatewayInterface {
+    if (!$this->isExpressRequest()) {
+      return NULL;
+    }
+    $gateway = $this->routeMatch->getParameter('commerce_payment_gateway');
+    return $gateway instanceof PaymentGatewayInterface ? $gateway : NULL;
   }
 
 }

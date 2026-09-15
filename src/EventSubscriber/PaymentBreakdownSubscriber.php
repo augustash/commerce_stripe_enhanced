@@ -5,6 +5,7 @@ namespace Drupal\commerce_stripe_enhanced\EventSubscriber;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_stripe\Event\PaymentIntentCreateEvent;
 use Drupal\commerce_stripe\Event\PaymentIntentUpdateEvent;
+use Drupal\commerce_stripe_enhanced\ExpressCheckoutContext;
 use Drupal\commerce_stripe_enhanced\PaymentBreakdown;
 use Drupal\commerce_stripe_enhanced\Plugin\Commerce\PaymentGateway\StripePaymentElement;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -28,9 +29,12 @@ class PaymentBreakdownSubscriber implements EventSubscriberInterface {
    *
    * @param \Drupal\commerce_stripe_enhanced\PaymentBreakdown $breakdown
    *   The payment breakdown builder.
+   * @param \Drupal\commerce_stripe_enhanced\ExpressCheckoutContext $expressContext
+   *   The express checkout context.
    */
   public function __construct(
     protected PaymentBreakdown $breakdown,
+    protected ExpressCheckoutContext $expressContext,
   ) {}
 
   /**
@@ -91,9 +95,12 @@ class PaymentBreakdownSubscriber implements EventSubscriberInterface {
 
   /**
    * Whether the order pays through this module's gateway.
+   *
+   * An express confirm creates its intent before recording the gateway on the
+   * order, so there the gateway comes from the request.
    */
   protected function applies(OrderInterface $order): bool {
-    $gateway = $order->get('payment_gateway')->entity;
+    $gateway = $order->get('payment_gateway')->entity ?? $this->expressContext->gateway();
     return $gateway && $gateway->getPlugin() instanceof StripePaymentElement;
   }
 
