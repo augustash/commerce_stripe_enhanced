@@ -117,6 +117,13 @@ whenever the balance moves. That service is replaced with a subclass sending bot
 breakdown cannot add up to (a partial payment, a fractional quantity) sends none, and clears any
 already there: a payment without a breakdown still goes through, a refused intent does not.
 
+**Stripe is told who paid.** Upstream passes the order's email to the Payment Element as a
+default value, which only fills a field the customer is shown — and a card form has no email
+field, so a guest's payment reached Stripe with nothing identifying them: no email on the
+charge, and a dashboard row that cannot be matched to a person without opening the order. The
+element now declares the email as supplied by the site, and the card confirm sends it. A
+logged-in customer was already identified by the Stripe customer their account carries.
+
 **A Payment Element that survives an AJAX refresh.** Upstream binds a submit listener per
 mount, so each refresh of the payment pane leaves another listener holding a destroyed
 Elements instance — and on submit the stale one throws "We could not retrieve data from the

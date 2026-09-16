@@ -95,6 +95,14 @@
     // without it there is a saved method behind the client secret already.
     if (settings.showPaymentForm) {
       options.elements = elements;
+      // The order's email, which the element declares it will not collect. A
+      // card form has no email field, so this is the only thing that tells
+      // Stripe - and the dashboard, and a dispute - who paid.
+      if (settings.billingEmail) {
+        options.confirmParams.payment_method_data = {
+          billing_details: { email: settings.billingEmail },
+        };
+      }
     }
     else {
       options.clientSecret = settings.clientSecret;

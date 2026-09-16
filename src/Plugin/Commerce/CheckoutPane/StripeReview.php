@@ -55,6 +55,17 @@ class StripeReview extends StripeReviewBase {
       $settings['commerceStripePaymentElement']['paymentElementOptions']['terms']['card'] = 'never';
     }
 
+    // Upstream hands the order's email to the element as a default value,
+    // which fills a field the customer is shown - and a card form shows no
+    // email field, so nothing carried it to Stripe: a guest's payment reached
+    // the dashboard with no way to tell who paid. Declaring the field "never"
+    // is Stripe's own way of saying the site supplies it at confirm, which
+    // stripe-payment-element.js then does.
+    if ($this->order->getEmail() && isset($settings['commerceStripePaymentElement']['paymentElementOptions'])) {
+      $settings['commerceStripePaymentElement']['paymentElementOptions']['fields']['billingDetails']['email'] = 'never';
+      $settings['commerceStripePaymentElement']['billingEmail'] = $this->order->getEmail();
+    }
+
     // The Payment Element and the older Card Element each carry their own copy.
     foreach (['commerceStripePaymentElement', 'commerceStripe'] as $key) {
       if (!isset($settings[$key]['returnUrl'])) {
