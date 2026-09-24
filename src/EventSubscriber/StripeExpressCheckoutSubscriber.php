@@ -2,6 +2,7 @@
 
 namespace Drupal\commerce_stripe_enhanced\EventSubscriber;
 
+use Drupal\commerce_order\Event\OrderEvent;
 use Drupal\commerce_stripe\Event\ExpressCheckoutShippingProfileAlterEvent;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -29,6 +30,14 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  * +1 650-555-5555 - so it is normalised, or the field holds whichever shape the
  * customer's wallet happened to use.
  *
+ * The billing profile gets the same number. commerce_stripe builds that
+ * profile from the address alone, with no event to alter it by, so an express
+ * order reached the store with a billing phone nobody had written - and an
+ * order export listing billing details showed the column empty. It is copied
+ * from the shipping profile once the order saves: for Apple Pay and Amazon Pay
+ * that number came from the billing details in the first place, and for Google
+ * Pay it is the one the customer gave for the order.
+ *
  * @see \Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElement::updateShippingProfile()
  */
 class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
@@ -54,6 +63,7 @@ class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
   public static function getSubscribedEvents(): array {
     return [
       'commerce_stripe.express_checkout_shipping_profile_alter' => 'onShippingProfileAlter',
+      'commerce_order.commerce_order.presave' => 'onOrderPresave',
     ];
   }
 
@@ -99,6 +109,45 @@ class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
     if ($phone !== NULL && trim((string) $phone) !== '') {
       $profile->set($field_name, $this->formatPhone((string) $phone));
     }
+  }
+
+  /**
+   * Copies the shipping phone onto an express order's billing profile.
+   *
+   * Only while the billing phone is empty, so a number the customer or an admin
+   * gave is never overwritten. Runs on every save of an express order rather
+   * than once: the billing profile and the shipping phone are written by the
+   * same express processing, and whichever order save follows it is the first
+   * that sees both.
+   *
+   * @param \Drupal\commerce_order\Event\OrderEvent $event
+   *   The order presave event.
+   */
+  public function onOrderPresave(OrderEvent $event): void {
+    $order = $event->getOrder();
+    if (!$order->getData('stripe_express_checkout')) {
+      return;
+    }
+
+    $field_name = $this->configFactory
+      ->get('commerce_stripe_enhanced.settings')
+      ->get('shipping_phone_field');
+    if (empty($field_name)) {
+      return;
+    }
+
+    $billing = $order->getBillingProfile();
+    if (!$billing || !$billing->hasField($field_name) || !$billing->get($field_name)->isEmpty()) {
+      return;
+    }
+
+    $shipping = $order->collectProfiles()['shipping'] ?? NULL;
+    if (!$shipping || !$shipping->hasField($field_name) || $shipping->get($field_name)->isEmpty()) {
+      return;
+    }
+
+    $billing->set($field_name, $shipping->get($field_name)->value);
+    $billing->save();
   }
 
   /**
