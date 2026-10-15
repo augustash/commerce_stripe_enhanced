@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * @file
+ * Answers the express access hook from the order's data, for tests.
+ */
+
+use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\Core\Access\AccessResult;
+
+/**
+ * Implements hook_commerce_stripe_enhanced_express_access().
+ */
+function commerce_stripe_enhanced_test_commerce_stripe_enhanced_express_access(OrderInterface $order) {
+  return match ($order->getData('express_access')) {
+    'forbidden' => AccessResult::forbidden(),
+    'allowed' => AccessResult::allowed(),
+    default => AccessResult::neutral(),
+  };
+}
