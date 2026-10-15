@@ -13,6 +13,7 @@ services:
       - '@entity_type.manager'
       - '@config.factory'
       - '@plugin.manager.commerce_payment_method_type'
+      - '@module_handler'
   commerce_stripe_enhanced.express_checkout:
     class: Drupal\commerce_stripe_enhanced\ExpressCheckout
     arguments:
@@ -51,5 +52,14 @@ services:
   commerce_stripe_enhanced.express_checkout_subscriber:
     class: Drupal\commerce_stripe_enhanced\EventSubscriber\StripeExpressCheckoutSubscriber
     arguments: ['@config.factory']
+    tags:
+      - { name: event_subscriber }
+  commerce_stripe_enhanced.express_access_check:
+    class: Drupal\commerce_stripe_enhanced\Access\ExpressAccessCheck
+    arguments: ['@commerce_stripe_enhanced.express_methods']
+    tags:
+      - { name: access_check, applies_to: _commerce_stripe_enhanced_express_access }
+  commerce_stripe_enhanced.route_subscriber:
+    class: Drupal\commerce_stripe_enhanced\Routing\RouteSubscriber
     tags:
       - { name: event_subscriber }

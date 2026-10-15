@@ -6,6 +6,7 @@
  */
 
 use Drupal\commerce_checkout\Plugin\Commerce\CheckoutFlow\CheckoutFlowBase;
+use Drupal\commerce_order\Entity\Order;
 use Drupal\commerce_payment\Entity\PaymentGateway;
 use Drupal\commerce_payment\Entity\PaymentMethodInterface;
 use Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElementInterface;
@@ -99,6 +100,25 @@ function commerce_stripe_enhanced_library_info_alter(array &$libraries, $extensi
         'attributes' => ['defer' => TRUE],
       ],
     ];
+  }
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ *
+ * commerce_stripe injects the wallets on the cart form itself, from a hook
+ * that asks nothing about the order beyond its total. An order the site has
+ * refused a wallet loses them here; this runs after upstream's same-named hook,
+ * which module order guarantees.
+ */
+function commerce_stripe_enhanced_form_views_form_commerce_cart_form_default_alter(array &$form, FormStateInterface $form_state) {
+  if (!isset($form['stripe_express_checkout_buttons'])) {
+    return;
+  }
+  $view = reset($form_state->getBuildInfo()['args']);
+  $order = $view ? Order::load($view->args[0] ?? 0) : NULL;
+  if ($order && \Drupal::service('commerce_stripe_enhanced.express_methods')->access($order)->isForbidden()) {
+    unset($form['stripe_express_checkout_buttons']);
   }
 }
 

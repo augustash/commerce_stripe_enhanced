@@ -6,8 +6,11 @@ use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_payment\PaymentMethodTypeManager;
 use Drupal\commerce_stripe\Plugin\Commerce\PaymentGateway\StripePaymentElementInterface;
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 
 /**
  * Tells the express wallets apart from the payment methods in the pane.
@@ -76,11 +79,14 @@ class ExpressMethods {
    *   The config factory.
    * @param \Drupal\commerce_payment\PaymentMethodTypeManager $paymentMethodTypeManager
    *   The payment method type plugin manager.
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $moduleHandler
+   *   The module handler.
    */
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected ConfigFactoryInterface $configFactory,
     protected PaymentMethodTypeManager $paymentMethodTypeManager,
+    protected ModuleHandlerInterface $moduleHandler,
   ) {}
 
   /**
@@ -96,9 +102,13 @@ class ExpressMethods {
    *   The order.
    *
    * @return \Drupal\commerce_payment\Entity\PaymentGatewayInterface|null
-   *   The gateway, or NULL if none of the order's gateways is a Stripe one.
+   *   The gateway, or NULL if none of the order's gateways is a Stripe one,
+   *   or the site has refused this order a wallet.
    */
   public function expressGateway(OrderInterface $order): ?PaymentGatewayInterface {
+    if (!$this->access($order)->isAllowed()) {
+      return NULL;
+    }
     $storage = $this->entityTypeManager->getStorage('commerce_payment_gateway');
     foreach ($storage->loadMultipleForOrder($order) as $payment_gateway) {
       if ($payment_gateway->getPlugin() instanceof StripePaymentElementInterface) {
@@ -107,6 +117,39 @@ class ExpressMethods {
     }
 
     return NULL;
+  }
+
+  /**
+   * Whether this order may be paid through an express wallet at all.
+   *
+   * A wallet is a whole checkout in one tap: it supplies the address and the
+   * delivery choice, and commerce_stripe's confirm clears whatever checkout had
+   * collected and jumps the order to review. Every rule a site enforces on the
+   * steps in between - an order held for approval, a quote entered by staff -
+   * is skipped, and nothing upstream asks. So the site is asked here, through
+   * hook_commerce_stripe_enhanced_express_access(), and one refusal is final.
+   *
+   * Refusing the gateway rather than hiding a button is what keeps the answer
+   * in one place: the checkout placement, the pane's wallet suppression and
+   * the endpoints' access check all read it, so a refused order keeps its
+   * wallets inside the Payment Element, where the steps are not skipped.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface $order
+   *   The order.
+   *
+   * @return \Drupal\Core\Access\AccessResultInterface
+   *   Forbidden if any module refuses, allowed otherwise.
+   */
+  public function access(OrderInterface $order): AccessResultInterface {
+    // Only a forbidden result refuses. A module with no opinion returns
+    // neutral, and that must not take the wallets away from everyone else.
+    foreach ($this->moduleHandler->invokeAll('commerce_stripe_enhanced_express_access', [$order]) as $result) {
+      if ($result instanceof AccessResultInterface && $result->isForbidden()) {
+        return $result;
+      }
+    }
+
+    return AccessResult::allowed();
   }
 
   /**
