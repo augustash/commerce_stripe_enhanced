@@ -82,7 +82,11 @@ class StripeExpressCheckoutSubscriber implements EventSubscriberInterface {
     }
 
     $profile = $event->getShippingProfile();
-    if (!$profile->hasField($field_name)) {
+    // Only into an empty field. A wallet that collected the address built this
+    // profile itself and left it empty; one paying for an order whose shipping
+    // was settled beforehand finds the number given for that delivery, which
+    // the wallet's own has no business replacing.
+    if (!$profile->hasField($field_name) || !$profile->get($field_name)->isEmpty()) {
       return;
     }
 

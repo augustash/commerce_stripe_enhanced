@@ -63,3 +63,17 @@ services:
     class: Drupal\commerce_stripe_enhanced\Routing\RouteSubscriber
     tags:
       - { name: event_subscriber }
+  commerce_stripe_enhanced.settled_shipping_buttons_builder:
+    class: Drupal\commerce_stripe_enhanced\SettledShippingButtonsBuilder
+    decorates: commerce_stripe.express_checkout_buttons_builder
+    arguments:
+      - '@commerce_stripe_enhanced.settled_shipping_buttons_builder.inner'
+      - '@commerce_stripe_enhanced.express_methods'
+  commerce_stripe_enhanced.settled_shipping_subscriber:
+    class: Drupal\commerce_stripe_enhanced\EventSubscriber\SettledShippingSubscriber
+    arguments:
+      - '@current_route_match'
+      - '@commerce_stripe_enhanced.express_methods'
+      - '@commerce_price.minor_units_converter'
+    tags:
+      - { name: event_subscriber }

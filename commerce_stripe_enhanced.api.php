@@ -35,5 +35,25 @@ function hook_commerce_stripe_enhanced_express_access(OrderInterface $order) {
 }
 
 /**
+ * Declares an order's shipping settled, so a wallet takes payment only.
+ *
+ * Upstream's express flow owns shipping: the sheet asks for an address and
+ * re-rates it, and the confirm and a dismissed sheet both clear what checkout
+ * collected. For an order whose shipping the site has already fixed - a quote,
+ * an approved delivery - return TRUE: the sheet then asks for no address, the
+ * order's shipping and profiles are left alone, and the wallet charges the
+ * order's total as it stands.
+ *
+ * @param \Drupal\commerce_order\Entity\OrderInterface $order
+ *   The order.
+ *
+ * @return bool
+ *   TRUE if the order's shipping is settled.
+ */
+function hook_commerce_stripe_enhanced_express_shipping_settled(OrderInterface $order) {
+  return (bool) $order->getData('shipping_quoted', FALSE);
+}
+
+/**
  * @} End of "addtogroup hooks".
  */

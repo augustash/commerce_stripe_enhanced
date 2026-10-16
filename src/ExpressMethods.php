@@ -153,6 +153,27 @@ class ExpressMethods {
   }
 
   /**
+   * Whether this order's shipping is settled, so a wallet must not touch it.
+   *
+   * Upstream's express flow owns shipping: the sheet collects an address and
+   * re-rates it, the confirm clears what checkout had collected, and a
+   * dismissed sheet deletes the shipments outright. Right for an order whose
+   * delivery is still open; destructive for one whose shipping a site has
+   * already fixed - a freight quote staff entered by hand. A site names those
+   * orders through hook_commerce_stripe_enhanced_express_shipping_settled(),
+   * and the wallet then takes payment only.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface $order
+   *   The order.
+   *
+   * @return bool
+   *   TRUE if any module declares the shipping settled.
+   */
+  public function isShippingSettled(OrderInterface $order): bool {
+    return in_array(TRUE, $this->moduleHandler->invokeAll('commerce_stripe_enhanced_express_shipping_settled', [$order]), TRUE);
+  }
+
+  /**
    * Whether this order's customer is offered the express wallets anywhere.
    *
    * Either upstream's cart placement or ours in checkout. The distinction
