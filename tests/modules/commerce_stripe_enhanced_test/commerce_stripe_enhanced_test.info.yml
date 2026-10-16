@@ -1,6 +1,6 @@
 name: "Commerce Stripe Enhanced test"
 type: module
-description: "Answers the express access hook from the order's data, for tests."
+description: "Answers the express hooks from the order's data, for tests."
 package: Testing
 core_version_requirement: ^10 || ^11
 dependencies:

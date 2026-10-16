@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Answers the express access hook from the order's data, for tests.
+ * Answers the express hooks from the order's data, for tests.
  */
 
 use Drupal\commerce_order\Entity\OrderInterface;
@@ -17,4 +17,11 @@ function commerce_stripe_enhanced_test_commerce_stripe_enhanced_express_access(O
     'allowed' => AccessResult::allowed(),
     default => AccessResult::neutral(),
   };
+}
+
+/**
+ * Implements hook_commerce_stripe_enhanced_express_shipping_settled().
+ */
+function commerce_stripe_enhanced_test_commerce_stripe_enhanced_express_shipping_settled(OrderInterface $order) {
+  return (bool) $order->getData('express_settled', FALSE);
 }
